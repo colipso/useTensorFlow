@@ -1,0 +1,5 @@
+*.tar.gz
+.ipynb_checkpoints/
+log.txt
+notMNIST_large/
+notMNIST_small/
