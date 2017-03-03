@@ -19,7 +19,8 @@ from six.moves.urllib.request import urlretrieve
 from six.moves import cPickle as pickle
 import datetime
 import PIL
-
+import tensorflow as tf
+import tensorflow
 
 def Log(*context):
     '''
@@ -189,6 +190,155 @@ def examBalance(dataset , title):
     chart.add('data Length' , dataLen)
     chart.render_in_browser()
     
-examBalance(train_dataset , 'train_dataset')
-examBalance(test_dataset , 'test_dataset')
-examBalance(valid_dataset , 'valid_dataset')
+#examBalance(train_dataset , 'train_dataset')
+#examBalance(test_dataset , 'test_dataset')
+#examBalance(valid_dataset , 'valid_dataset')
+useLogisticRegression = False
+if useLogisticRegression:
+    #use LogisticRegression
+    train_dataset_R = train_dataset.reshape(200000,784)
+    test_dataset_R = test_dataset.reshape(10000,784)
+    reg = LogisticRegression()
+    reg.fit(train_dataset_R, train_labels)
+    #Returns the mean accuracy on the given test data and labels.
+    testScore = reg.score(test_dataset_R,test_labels) #shoud around 0.9
+    print(testScore)
+    Log("LogisticRegression Model test score is" , testScore)
+
+#use TensorFlow
+num_labels = 10
+def reformat(dataset , labels):
+    dataset = dataset.reshape((-1 , image_size*image_size)).astype(np.float32)
+    labels = (np.arange(num_labels) == labels[:,None]).astype(np.float32)
+    return dataset,labels
+
+train_dataset, train_labels = reformat(train_dataset, train_labels)
+valid_dataset, valid_labels = reformat(valid_dataset, valid_labels)
+test_dataset, test_labels = reformat(test_dataset, test_labels)
+Log('Training set', train_dataset.shape, train_labels.shape)
+Log('Validation set', valid_dataset.shape, valid_labels.shape)
+Log('Test set', test_dataset.shape, test_labels.shape)
+
+train_subset = 10000
+graph = tf.Graph()
+with graph.as_default():
+    tf_train_dataset = tf.constant(train_dataset[:train_subset,:])
+    tf_train_labels = tf.constant(train_labels[:train_subset])
+    tf_valid_dataset = tf.constant(valid_dataset)
+    tf_test_dataset = tf.constant(test_dataset)
+    
+    weights = tf.Variable(tf.truncated_normal([image_size*image_size,num_labels]))
+    biases = tf.Variable(tf.zeros([num_labels]))
+    
+    logits = tf.matmul(tf_train_dataset,weights) + biases
+    loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits = logits,labels = tf_train_labels))
+    
+    optimizer = tf.train.GradientDescentOptimizer(0.5).minimize(loss)
+    
+    train_prediction = tf.nn.softmax(logits)
+    valid_prediction = tf.nn.softmax(tf.matmul(tf_valid_dataset,weights)+biases)
+    test_prediction = tf.nn.softmax(tf.matmul(tf_test_dataset,weights)+biases)
+    
+num_steps = 801
+def accuracy(predictions , labels):
+    return (100*np.sum(np.argmax(predictions,1)==np.argmax(labels,1))/predictions.shape[0])
+with tf.Session(graph = graph) as session:
+    tf.initialize_all_variables().run()
+    Log("Initiallized")
+    for step in range(num_steps):
+        _,l,predictions = session.run([optimizer , loss , train_prediction])
+        if step%100 == 0:
+            Log('Loss at step %d: %f' % (step, l))
+            Log('Training accuracy: %.1f%%' % accuracy(predictions , train_labels[:train_subset,:]))
+            Log('Validation accuracy: %.1f%%' % accuracy(valid_prediction.eval(),valid_labels))
+    Log('Test accuracy: %.1f%%' % accuracy(test_prediction.eval(), test_labels))
+           
+batch_size = 128
+
+graph2 = tf.Graph()
+with graph2.as_default():
+    tf2_train_dataset = tf.placeholder(tf.float32 , shape=(batch_size , image_size*image_size))
+    tf2_train_labels = tf.placeholder(tf.float32 , shape = (batch_size , num_labels))
+    tf2_valid_dataset = tf.constant(valid_dataset)
+    tf2_test_dataset = tf.constant(test_dataset)
+    
+    weights = tf.Variable(tf.truncated_normal([image_size*image_size,num_labels]))
+    biases = tf.Variable(tf.zeros([num_labels]))
+    
+    logits = tf.matmul(tf2_train_dataset , weights) + biases
+    loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits = logits , labels = tf2_train_labels))
+    
+    optimizer = tf.train.GradientDescentOptimizer(0.5).minimize(loss)
+    
+    train_prediction = tf.nn.softmax(logits)
+    valid_prediction = tf.nn.softmax(tf.matmul(tf2_valid_dataset,weights)+biases)
+    test_prediction = tf.nn.softmax(tf.matmul(tf2_test_dataset,weights)+biases)
+    
+num_steps = 3001
+with tf.Session(graph = graph2) as session:
+    tf.initialize_all_variables().run()
+    Log('Initiallzed')
+    for step in range(num_steps):
+        offset = (step*batch_size)%(train_labels.shape[0]-batch_size)
+        batch_data = train_dataset[offset:(offset+batch_size),:]
+        batch_labels = train_labels[offset:(offset+batch_size),:]
+        
+        feed_dict = {tf2_train_dataset:batch_data,
+                     tf2_train_labels:batch_labels}
+        _,l,predictions = session.run([optimizer,loss , train_prediction],feed_dict = feed_dict)
+        if step%500 == 0:
+            Log("Minibatch loss at step %d: %f" % (step, l))
+            Log("Minibatch accuracy: %.1f%%" % accuracy(predictions, batch_labels))
+            Log("Validation accuracy: %.1f%%" % accuracy(valid_prediction.eval(), valid_labels))
+    Log("Test accuracy: %.1f%%" % accuracy(test_prediction.eval(), test_labels))
+    
+
+graph3 = tf.Graph()
+with graph3.as_default():
+    tf3_train_dataset = tf.placeholder(tf.float32,shape=(batch_size , image_size*image_size))
+    tf3_train_labels = tf.placeholder(tf.float32 , shape=(batch_size , num_labels))
+    tf3_valid_dataset = tf.constant(valid_dataset)
+    tf3_test_dataset = tf.constant(test_dataset)
+    
+    weights = tf.Variable(tf.truncated_normal([image_size*image_size,num_labels]))
+    biases = tf.Variable(tf.zeros([num_labels]))
+    
+    logits = tf.nn.relu(tf.matmul(tf3_train_dataset , weights) + biases)
+    loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits = logits , labels = tf3_train_labels))
+    
+    optimizer = tf.train.GradientDescentOptimizer(0.5).minimize(loss)
+    
+    train_prediction = tf.nn.softmax(logits)
+    valid_prediction = tf.nn.softmax(tf.matmul(tf3_valid_dataset,weights)+biases)
+    test_prediction = tf.nn.softmax(tf.matmul(tf3_test_dataset,weights)+biases)
+    
+num_steps = 3001
+#merged_summary_op = tf.merge_all_summaries()
+
+with tf.Session(graph = graph3) as session:
+    tf.initialize_all_variables().run()
+    #summary_writer = tf.train.SummaryWriter('./mnist_logs', session.graph)
+    Log('Initiallzed')
+    for step in range(num_steps):
+        offset = (step*batch_size)%(train_labels.shape[0]-batch_size)
+        batch_data = train_dataset[offset:(offset+batch_size),:]
+        batch_labels = train_labels[offset:(offset+batch_size),:]
+        
+        feed_dict = {tf3_train_dataset:batch_data,
+                     tf3_train_labels:batch_labels}
+        _,l,predictions = session.run([optimizer,loss , train_prediction],feed_dict = feed_dict)
+        if step%500 == 0:
+            Log("Minibatch loss at step %d: %f" % (step, l))
+            Log("Minibatch accuracy: %.1f%%" % accuracy(predictions, batch_labels))
+            Log("Validation accuracy: %.1f%%" % accuracy(valid_prediction.eval(), valid_labels))
+            #summary_str = session.run(merged_summary_op)
+            #summary_writer.add_summary(summary_str, step)
+    Log("Test accuracy: %.1f%%" % accuracy(test_prediction.eval(), test_labels))            
+
+    
+    
+    
+    
+    
+
+           
