@@ -220,6 +220,7 @@ Log('Validation set', valid_dataset.shape, valid_labels.shape)
 Log('Test set', test_dataset.shape, test_labels.shape)
 
 train_subset = 10000
+Log("a normal and simple deep learning model")
 graph = tf.Graph()
 with graph.as_default():
     tf_train_dataset = tf.constant(train_dataset[:train_subset,:])
@@ -255,6 +256,8 @@ with tf.Session(graph = graph) as session:
            
 batch_size = 128
 
+
+Log("Use deep learning model with batch")
 graph2 = tf.Graph()
 with graph2.as_default():
     tf2_train_dataset = tf.placeholder(tf.float32 , shape=(batch_size , image_size*image_size))
@@ -293,6 +296,7 @@ with tf.Session(graph = graph2) as session:
     Log("Test accuracy: %.1f%%" % accuracy(test_prediction.eval(), test_labels))
     
 
+Log("Use deep learning model with RELU")
 graph3 = tf.Graph()
 with graph3.as_default():
     tf3_train_dataset = tf.placeholder(tf.float32,shape=(batch_size , image_size*image_size))
@@ -309,8 +313,8 @@ with graph3.as_default():
     optimizer = tf.train.GradientDescentOptimizer(0.5).minimize(loss)
     
     train_prediction = tf.nn.softmax(logits)
-    valid_prediction = tf.nn.softmax(tf.matmul(tf3_valid_dataset,weights)+biases)
-    test_prediction = tf.nn.softmax(tf.matmul(tf3_test_dataset,weights)+biases)
+    valid_prediction = tf.nn.softmax(tf.nn.relu(tf.matmul(tf3_valid_dataset,weights)+biases))
+    test_prediction = tf.nn.softmax(tf.nn.relu(tf.matmul(tf3_test_dataset,weights)+biases))
     
 num_steps = 3001
 #merged_summary_op = tf.merge_all_summaries()
@@ -336,7 +340,8 @@ with tf.Session(graph = graph3) as session:
     Log("Test accuracy: %.1f%%" % accuracy(test_prediction.eval(), test_labels))            
 
     
-    
+Log("Deep learning Model with regularization")
+
     
     
     
