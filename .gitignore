@@ -4,3 +4,5 @@ log.txt
 notMNIST_large/
 *.pickle
 notMNIST_small/
+data/
+*.zip
